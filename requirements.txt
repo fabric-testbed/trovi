@@ -1,0 +1,14 @@
+cmarkgfm
+Django
+djangorestframework
+drf-extensions
+drf-spectacular
+giturlparse
+jsonpatch
+jsonschema
+keystoneauth1
+psycopg2-binary
+PyJWT
+python-jose
+python-keycloak-client
+uwsgi

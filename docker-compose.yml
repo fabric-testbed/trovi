@@ -1,42 +1,68 @@
-version: "3.5"
+# docker-compose.yml
+# - nginx port 8080, 8443 exposed to host (http, https) - self signed certs by default
 
+version: '3.9'
 services:
-  trovi:
-    container_name: trovi_web
-    image: ${DOCKER_IMAGE_LATEST}
-    restart: on-failure
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${TROVI_PORT}"]
-      timeout: 10s
-      retries: 3
-    env_file:
-      - .env
-    volumes:
-      - .:/project
-      - ./media:/media
-      - static:/static
-    ports:
-      - "127.0.0.1:8890:${TROVI_PORT}"
-    entrypoint: ["python3", "manage.py"]
-    command: ["runserver", "0.0.0.0:${TROVI_PORT}"]
-    depends_on:
-      - db
 
   db:
-    container_name: trovi_db
-    image: mariadb:${DB_IMG_TAG}
-    restart: on-failure
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 10s
-      retries: 10
+    # default port 5432
+    image: postgres:14
+    container_name: trovi-db
+    networks:
+      - trovi-network
+#    ports:
+#      - "5432:5432"
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - ./db:/docker-entrypoint-initdb.d
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+#      PGDATA: ${PGDATA}
+#    volumes:
+#      - ${HOST_DB_DATA}:/var/lib/postgresql/data
+    restart: unless-stopped
 
-volumes:
-  static:
+  nginx:
+    # default port 8080, 8443
+    image: nginx:1
+    container_name: trovi-nginx
+    networks:
+      - trovi-network
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - .:/code
+#      - ./static:/code/static
+#      - ./media:/code/media
+      - ${NGINX_DEFAULT_CONF}:/etc/nginx/conf.d/default.conf
+      - ${NGINX_NGINX_CONF}:/etc/nginx/nginx.conf
+      - ${NGINX_SSL_CERTS_DIR}:/etc/ssl:ro
+    restart: unless-stopped
+
+  trovi:
+    # default port 8000
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: trovi-django
+    networks:
+      - trovi-network
+#    ports:
+#      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./:/code
+#      - ./static:/code/portal/static
+#      - ./media:/code/portal/media
+    environment:
+      - UWSGI_UID=${UWSGI_UID}
+      - UWSGI_GID=${UWSGI_GID}
+      - LOAD_FIXTURES=${LOAD_FIXTURES:-0}
+      - MAKE_MIGRATIONS=${MAKE_MIGRATIONS:-0}
+    restart: unless-stopped
+
+networks:
+  trovi-network:
+    name: trovi-network
+    driver: bridge
